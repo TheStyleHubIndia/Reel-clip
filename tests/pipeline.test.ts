@@ -251,7 +251,7 @@ async function runTests() {
   const evilId = '../../../etc/passwd';
   const sanitizedClipId = String(evilId).replace(/[^a-zA-Z0-9_\-]/g, '_');
   assert(!sanitizedClipId.includes('/'), 'Path traversal characters eliminated from clip identifiers');
-  assert(sanitizedClipId.startsWith('______etc_passwd'), 'Sanitized clip identifier is safe');
+  assert(sanitizedClipId.startsWith('_________etc_passwd'), 'Sanitized clip identifier is safe');
 
   // 11. Edited Clip Rendering with Real Custom Bounds & Hook
   console.log('\n11. Testing Edited Clip Rendering with Real Custom Bounds & Hook:');

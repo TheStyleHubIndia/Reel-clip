@@ -202,11 +202,69 @@ export default function App() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const timelineBarRef = useRef<HTMLDivElement>(null);
 
-  // Fetch initial system status and campaign profiles
+  // YouTube Cookies State
+  const [hasCookies, setHasCookies] = useState<boolean>(false);
+  const [showCookieModal, setShowCookieModal] = useState<boolean>(false);
+  const [cookieInput, setCookieInput] = useState<string>('');
+  const [cookieStatusMsg, setCookieStatusMsg] = useState<string | null>(null);
+
+  // Fetch initial system status, campaign profiles, and cookie status
   useEffect(() => {
     fetchSystemStatus();
     fetchCampaignProfiles();
+    fetchCookieStatus();
   }, []);
+
+  const fetchCookieStatus = async () => {
+    try {
+      const res = await fetch('/api/settings/cookies');
+      if (res.ok) {
+        const data = await res.json();
+        setHasCookies(Boolean(data.hasCookies));
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleSaveCookies = async () => {
+    if (!cookieInput.trim()) {
+      setCookieStatusMsg('Please paste cookies.txt content.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/settings/cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: cookieInput })
+      });
+      if (res.ok) {
+        setHasCookies(true);
+        setCookieStatusMsg('Cookies saved successfully! yt-dlp will now authenticate requests.');
+        setTimeout(() => {
+          setShowCookieModal(false);
+          setCookieStatusMsg(null);
+          setCookieInput('');
+        }, 1500);
+      } else {
+        const data = await res.json();
+        setCookieStatusMsg(data.error || 'Failed to save cookies.');
+      }
+    } catch (err: any) {
+      setCookieStatusMsg(err.message || 'Error saving cookies.');
+    }
+  };
+
+  const handleClearCookies = async () => {
+    try {
+      await fetch('/api/settings/cookies', { method: 'DELETE' });
+      setHasCookies(false);
+      setCookieStatusMsg('Cookies removed.');
+      setTimeout(() => setCookieStatusMsg(null), 1500);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Poll active pipeline job
   useEffect(() => {
@@ -856,22 +914,40 @@ export default function App() {
 
                 {inputMode === 'url' && (
                   <div className="space-y-3">
-                    <label className="text-xs font-medium text-slate-400">
-                      YouTube Video or Shorts URL
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-slate-400">
+                        YouTube Video, Shorts, or Direct Video URL
+                      </label>
+                      <button
+                        onClick={() => setShowCookieModal(true)}
+                        className={`text-[11px] flex items-center space-x-1 px-2 py-0.5 rounded cursor-pointer transition ${
+                          hasCookies
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        <span>{hasCookies ? 'YouTube Cookies: Active' : '+ YouTube Cookies'}</span>
+                      </button>
+                    </div>
                     <div className="relative">
                       <LinkIcon className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
                       <input
                         type="text"
-                        placeholder="https://www.youtube.com/watch?v=... or https://youtube.com/shorts/..."
+                        placeholder="https://www.youtube.com/watch?v=... or direct MP4/WebM URL"
                         value={videoUrl}
                         onChange={(e) => setVideoUrl(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Supports full YouTube videos, YouTube Shorts, and direct MP4/WebM URLs via yt-dlp.
-                    </p>
+                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+                      <p>
+                        <strong className="text-amber-400">Notice for YouTube links:</strong> YouTube periodically blocks cloud data centers with HTTP 429 bot checks.
+                      </p>
+                      <p className="text-slate-500">
+                        If a YouTube URL triggers a bot check, you can use the <strong>Upload File</strong> tab to process your MP4 file locally, provide a direct MP4/WebM stream URL, or click <strong className="text-slate-400">+ YouTube Cookies</strong> above.
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -1060,6 +1136,48 @@ export default function App() {
                       ))}
                       <div ref={logsEndRef} />
                     </div>
+
+                    {activeJob.state === 'FAILED' && (
+                      <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/80 space-y-2.5">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-bold text-rose-300">Pipeline Stopped</p>
+                            <p className="text-[11px] text-slate-300 mt-0.5">{activeJob.error || 'Execution encountered an error'}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-rose-900/60 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              setInputMode('upload');
+                              setActiveJob(null);
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-medium border border-slate-700 cursor-pointer flex items-center space-x-1"
+                          >
+                            <Upload className="w-3 h-3 text-amber-400" />
+                            <span>Upload MP4 File Instead</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setInputMode('sample');
+                              setActiveJob(null);
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-medium border border-slate-700 cursor-pointer flex items-center space-x-1"
+                          >
+                            <Zap className="w-3 h-3 text-amber-400" />
+                            <span>Run Instant Demo</span>
+                          </button>
+                          <button
+                            onClick={() => setShowCookieModal(true)}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-medium border border-slate-700 cursor-pointer flex items-center space-x-1"
+                          >
+                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                            <span>Configure YouTube Cookies</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-2">
                       <button
@@ -2018,6 +2136,87 @@ export default function App() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YouTube Cookie Configuration Modal */}
+      {showCookieModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-white text-base">YouTube Cookies Authentication</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCookieModal(false);
+                  setCookieStatusMsg(null);
+                }}
+                className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              YouTube blocks cloud data centers (GCP, AWS, etc.) from downloading video streams without authentication.
+              Exporting cookies from your browser allows <code className="text-amber-400 font-mono">yt-dlp</code> to authenticate as a logged-in user and bypass HTTP 429 bot challenges.
+            </p>
+
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+              <p className="font-semibold text-slate-300">How to export cookies in 30 seconds:</p>
+              <p>1. Install browser extension <span className="text-amber-400">"Get cookies.txt LOCALLY"</span> (Chrome/Firefox).</p>
+              <p>2. Open YouTube while logged in, click the extension, and copy the text.</p>
+              <p>3. Paste the contents below.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Paste Netscape formatted cookies.txt:</label>
+              <textarea
+                rows={5}
+                value={cookieInput}
+                onChange={(e) => setCookieInput(e.target.value)}
+                placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;1735689600&#9;VISITOR_INFO1_LIVE&#9;..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
+              />
+            </div>
+
+            {cookieStatusMsg && (
+              <p className="text-xs text-amber-400 font-medium">{cookieStatusMsg}</p>
+            )}
+
+            <div className="pt-2 flex justify-between items-center">
+              {hasCookies ? (
+                <button
+                  type="button"
+                  onClick={handleClearCookies}
+                  className="text-xs text-rose-400 hover:text-rose-300 font-medium cursor-pointer"
+                >
+                  Remove Saved Cookies
+                </button>
+              ) : (
+                <span className="text-[11px] text-slate-500">No cookies stored</span>
+              )}
+
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCookieModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCookies}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow cursor-pointer"
+                >
+                  Save Cookies
+                </button>
+              </div>
             </div>
           </div>
         </div>

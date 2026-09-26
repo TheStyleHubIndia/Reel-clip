@@ -87,31 +87,94 @@ app.delete('/api/campaign-profiles/:id', (req, res) => {
   }
 });
 
-// 3. Project Creation from Upload
-app.post('/api/projects/upload', upload.single('video') as any, async (req, res) => {
+// YouTube Cookies API for yt-dlp authentication
+app.get('/api/settings/cookies', (_req, res) => {
+  const cookiePath = path.join(process.cwd(), 'cookies.txt');
+  const exists = fs.existsSync(cookiePath) && fs.statSync(cookiePath).size > 0;
+  res.json({ hasCookies: exists });
+});
+
+app.post('/api/settings/cookies', (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'Cookie content is required' });
+    }
+    const cookiePath = path.join(process.cwd(), 'cookies.txt');
+    fs.writeFileSync(cookiePath, content.trim(), 'utf-8');
+    res.json({ success: true, message: 'Cookies saved successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/settings/cookies', (_req, res) => {
+  try {
+    const cookiePath = path.join(process.cwd(), 'cookies.txt');
+    if (fs.existsSync(cookiePath)) {
+      fs.unlinkSync(cookiePath);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Project Creation or Update from Upload
+app.post(['/api/projects/upload', '/api/projects/:id/upload'], upload.single('video') as any, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No video file provided' });
     }
 
-    const title = req.body.title || path.parse(req.file.originalname).name;
-    const project = JobManager.createProject({
-      title,
-      sourceType: 'UPLOAD',
-      sourceFilename: req.file.originalname
-    });
+    const projectId = req.params.id || req.body.projectId || (req.query.projectId as string);
+    let project: ProjectMetadata | null = null;
+
+    if (projectId) {
+      const existing = JobManager.getProject(projectId);
+      if (existing) {
+        project = existing.metadata;
+      }
+    }
+
+    const title = req.body.title || (project ? project.title : path.parse(req.file.originalname).name);
+
+    if (!project) {
+      project = JobManager.createProject({
+        title,
+        sourceType: 'UPLOAD',
+        sourceFilename: req.file.originalname
+      });
+    } else {
+      project.title = title || project.title;
+      project.sourceType = 'UPLOAD';
+      project.sourceFilename = req.file.originalname;
+      delete project.sourceUrl;
+    }
 
     // Move uploaded file into project source folder
-    const targetPath = path.join(process.cwd(), 'projects', project.id, 'source', req.file.originalname);
+    const targetPath = path.resolve(process.cwd(), 'projects', project.id, 'source', req.file.originalname);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.renameSync(req.file.path, targetPath);
 
     project.sourcePath = targetPath;
     fs.writeFileSync(
-      path.join(process.cwd(), 'projects', project.id, 'metadata', 'project.json'),
-      JSON.stringify(project, null, 2)
+      path.resolve(process.cwd(), 'projects', project.id, 'metadata', 'project.json'),
+      JSON.stringify(project, null, 2),
+      'utf-8'
     );
 
-    res.json({ success: true, project });
+    // If autoStart is requested or userPrompt provided directly on upload, start pipeline job
+    let jobId: string | undefined;
+    if (req.body.autoStart === 'true' || req.body.autoStart === true) {
+      jobId = JobManager.startPipelineJob(
+        project.id,
+        req.body.userPrompt || '',
+        req.body.campaignProfileId || 'general_creator'
+      );
+    }
+
+    res.json({ success: true, project, ...(jobId ? { jobId } : {}) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -235,6 +298,11 @@ app.post('/api/projects/:id/candidates', async (req, res) => {
 });
 
 // 10. Check Job Status
+app.get('/api/jobs', (_req, res) => {
+  const allJobs = Array.from((JobManager as any).jobs.values());
+  res.json({ jobs: allJobs });
+});
+
 app.get('/api/jobs/:id', (req, res) => {
   const job = JobManager.getJob(req.params.id);
   if (!job) {

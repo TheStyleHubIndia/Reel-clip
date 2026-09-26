@@ -107,7 +107,38 @@ export class JobManager {
   }
 
   static getJob(jobId: string): JobProgress | undefined {
-    return this.jobs.get(jobId);
+    const memJob = this.jobs.get(jobId);
+    if (memJob) return memJob;
+
+    try {
+      this.init();
+      const dirs = fs.readdirSync(this.projectsDir);
+      for (const d of dirs) {
+        const jobFile = path.join(this.projectsDir, d, 'metadata', `${jobId}.json`);
+        if (fs.existsSync(jobFile)) {
+          const loaded: JobProgress = JSON.parse(fs.readFileSync(jobFile, 'utf-8'));
+          this.jobs.set(jobId, loaded);
+          return loaded;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
+  }
+
+  static persistJobState(job: JobProgress) {
+    try {
+      this.init();
+      if (!job.projectId) return;
+      const projDir = path.join(this.projectsDir, path.basename(job.projectId));
+      const metaDir = path.join(projDir, 'metadata');
+      if (fs.existsSync(metaDir)) {
+        fs.writeFileSync(path.join(metaDir, `${job.id}.json`), JSON.stringify(job, null, 2), 'utf-8');
+      }
+    } catch {
+      // ignore
+    }
   }
 
   static cancelJob(jobId: string): boolean {
@@ -256,6 +287,7 @@ export class JobManager {
     };
 
     this.jobs.set(jobId, job);
+    this.persistJobState(job);
 
     // Run async pipeline orchestrator in background
     setTimeout(() => {
@@ -271,6 +303,19 @@ export class JobManager {
     job.updatedAt = new Date().toISOString();
     // Keep last 150 log entries
     if (job.logs.length > 150) job.logs.shift();
+
+    // Persist logs to project disk logs
+    try {
+      if (job.projectId) {
+        const projDir = path.join(this.projectsDir, path.basename(job.projectId));
+        const logDir = path.join(projDir, 'logs');
+        fs.mkdirSync(logDir, { recursive: true });
+        fs.appendFileSync(path.join(logDir, 'pipeline.log'), `${entry}\n`, 'utf-8');
+      }
+    } catch {
+      // ignore
+    }
+    this.persistJobState(job);
   }
 
   private static async executePipeline(
@@ -282,21 +327,52 @@ export class JobManager {
     const job = this.jobs.get(jobId);
     if (!job) return;
 
-    const projDir = path.join(this.projectsDir, path.basename(projectId));
-    const metaPath = path.join(projDir, 'metadata', 'project.json');
-    if (!fs.existsSync(metaPath)) {
-      job.state = 'FAILED';
-      job.error = 'Project metadata not found';
-      return;
-    }
-
-    const metadata: ProjectMetadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    metadata.userPrompt = userPrompt;
-    metadata.campaignProfileId = campaignProfileId;
-
     try {
-      // 1. Download if URL
-      if (metadata.sourceType === 'YOUTUBE' && metadata.sourceUrl && !fs.existsSync(metadata.sourcePath)) {
+      const projDir = path.join(this.projectsDir, path.basename(projectId));
+      const metaPath = path.join(projDir, 'metadata', 'project.json');
+      if (!fs.existsSync(metaPath)) {
+        job.state = 'FAILED';
+        job.error = 'Project metadata not found';
+        this.log(job, `ERROR: ${job.error}`);
+        return;
+      }
+
+      const metadata: ProjectMetadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      metadata.userPrompt = userPrompt;
+      metadata.campaignProfileId = campaignProfileId;
+
+      this.log(job, `Starting analysis orchestrator for project: ${metadata.title} (Source: ${metadata.sourceType})`);
+
+      // Detect any uploaded media file in project source directory
+      const sourceDir = path.join(projDir, 'source');
+      let localSourceFile: string | null = null;
+      if (fs.existsSync(sourceDir)) {
+        const files = fs.readdirSync(sourceDir).filter((f) => {
+          const ext = path.extname(f).toLowerCase();
+          return ['.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'].includes(ext);
+        });
+        if (files.length > 0) {
+          if (metadata.sourceFilename && files.includes(metadata.sourceFilename)) {
+            localSourceFile = path.resolve(sourceDir, metadata.sourceFilename);
+          } else {
+            localSourceFile = path.resolve(sourceDir, files[0]);
+          }
+        }
+      }
+
+      // If an uploaded local file is present, always prioritize UPLOAD source mode
+      // and prevent yt-dlp from accidentally being invoked
+      if (localSourceFile && fs.existsSync(localSourceFile)) {
+        metadata.sourceType = 'UPLOAD';
+        metadata.sourcePath = localSourceFile;
+        metadata.sourceFilename = path.basename(localSourceFile);
+        delete metadata.sourceUrl;
+        fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
+        this.log(job, `Verified uploaded media file on disk: ${metadata.sourcePath}`);
+      }
+
+      // 1. Download if URL (only if strictly YOUTUBE with no local source file)
+      if (metadata.sourceType === 'YOUTUBE' && metadata.sourceUrl && (!metadata.sourcePath || !fs.existsSync(metadata.sourcePath))) {
         job.state = 'DOWNLOADING';
         job.progressPercent = 10;
         job.currentStep = 'Downloading video via yt-dlp...';
@@ -308,6 +384,12 @@ export class JobManager {
         ]);
 
         if (dlResult.error) {
+          if (dlResult.code === 'YOUTUBE_BOT_BLOCK') {
+            this.log(job, `[YouTube Bot Protection] YouTube restricted cloud server IP access (HTTP 429).`);
+            this.log(job, `Notice: YouTube requires bot verification for cloud datacenter IPs.`);
+            this.log(job, `Action required: Upload the video directly using the 'Upload File' tab (MP4/MOV/WebM) or provide a direct video stream link.`);
+            throw new Error(`YouTube blocked download from cloud server (HTTP 429: Bot check). Please upload the video file directly using the 'Upload File' tab or provide a direct video URL.`);
+          }
           throw new Error(`Download failed: ${dlResult.error}`);
         }
         metadata.sourcePath = dlResult.file_path;
@@ -315,6 +397,23 @@ export class JobManager {
         metadata.title = dlResult.title || metadata.title;
         this.log(job, `Download completed: ${dlResult.filename}`);
       }
+
+      // Ensure source path is absolute and verified
+      if (!metadata.sourcePath || !fs.existsSync(metadata.sourcePath)) {
+        if (localSourceFile && fs.existsSync(localSourceFile)) {
+          metadata.sourcePath = localSourceFile;
+        } else {
+          const fallbackPath = path.resolve(projDir, 'source', metadata.sourceFilename || 'source.mp4');
+          if (fs.existsSync(fallbackPath)) {
+            metadata.sourcePath = fallbackPath;
+          } else {
+            throw new Error(`Source video not found on disk at: "${metadata.sourcePath || fallbackPath}"`);
+          }
+        }
+        fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
+      }
+
+      metadata.sourcePath = path.resolve(metadata.sourcePath);
 
       // 2. Probe Media
       job.state = 'PROBING';
@@ -327,11 +426,11 @@ export class JobManager {
         throw new Error(`FFprobe error: ${probeResult.error}`);
       }
 
-      metadata.duration = probeResult.duration;
-      metadata.width = probeResult.width;
-      metadata.height = probeResult.height;
-      metadata.fps = probeResult.fps;
-      metadata.hasAudio = probeResult.has_audio;
+      metadata.duration = probeResult.duration || 0;
+      metadata.width = probeResult.width || 1920;
+      metadata.height = probeResult.height || 1080;
+      metadata.fps = probeResult.fps || 30;
+      metadata.hasAudio = probeResult.has_audio !== undefined ? probeResult.has_audio : true;
       fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
       this.log(job, `Media probed: ${probeResult.width}x${probeResult.height} @ ${probeResult.fps}fps, duration: ${probeResult.duration}s`);
 
@@ -660,6 +759,10 @@ export class JobManager {
 
       proc.stderr.on('data', (d) => {
         stderr += d.toString();
+      });
+
+      proc.on('error', (err) => {
+        resolve({ error: `Failed to spawn ${scriptPath}: ${err.message}` });
       });
 
       proc.on('close', (code) => {

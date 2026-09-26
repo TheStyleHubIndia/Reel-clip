@@ -153,5 +153,173 @@
         "reason": "Claiming FDA approval is strictly prohibited for supplements."
       }
     ]
+  },
+  {
+    "id": "custom_1790457386266_xgzg",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790457418402_5vyb",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790458052787_8xb6",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790458139257_en6i",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790459461255_8tyq",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790459929195_i14l",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
+  },
+  {
+    "id": "custom_1790460324284_c0ux",
+    "name": "Test FDA & Medical Claims Profile",
+    "isCustom": true,
+    "allowedTerms": [],
+    "prohibitedTerms": [
+      "cure-all miracle",
+      "100% money back"
+    ],
+    "requiredTerms": [
+      "consult a doctor"
+    ],
+    "prohibitedClaimTypes": [],
+    "customRules": [],
+    "regexRules": [
+      {
+        "id": "r_fda_claim",
+        "name": "FDA Approved Claim",
+        "pattern": "fda\\s+approved",
+        "action": "BLOCK",
+        "reason": "Claiming FDA approval is strictly prohibited for supplements."
+      }
+    ]
   }
 ]
