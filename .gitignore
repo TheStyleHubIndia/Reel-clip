@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local test videos / generated clips
+test_clips_40/
+test_clips_40_9x16/
+*.mp4
+*.webm
+*.mkv
+*.mov
