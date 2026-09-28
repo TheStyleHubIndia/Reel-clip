@@ -10,7 +10,10 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
-from ultralytics import YOLO
+try:
+    from ultralytics import YOLO
+except Exception:
+    YOLO = None
 import torch
 import os
 import math
@@ -436,6 +439,8 @@ def _detection_frame(frame):
 
 
 def detect_face_candidates(frame):
+    if LITE_MODE or face_detection is None:
+        return []
     """
     Returns list of all detected faces using lightweight FaceDetection.
     In low-memory Render mode visual tracking is intentionally disabled and
@@ -471,6 +476,8 @@ def detect_face_candidates(frame):
     return candidates
 
 def detect_person_yolo(frame):
+    if LITE_MODE or model is None:
+        return None
     """
     Fallback: Detect largest person using YOLO when face detection fails.
     Disabled in low-memory Render mode.
