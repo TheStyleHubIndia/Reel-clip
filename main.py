@@ -2450,7 +2450,7 @@ if __name__ == '__main__':
             # 6, not 3: measured side by side on the GPU host at load 48-67, a 7-clip
             # job finished 16% sooner with the same CPU, and the peak VRAM stayed
             # at 12 GB of 20 (bench, 25-sep-2026).
-            clip_workers = max(int(os.environ.get("CLIP_WORKERS", "6")), 1)
+            clip_workers = max(int(os.environ.get("CLIP_WORKERS", "1")), 1)
             shorts = clips_data['shorts']
             failed = []
             with ThreadPoolExecutor(max_workers=min(clip_workers, len(shorts))) as pool:
