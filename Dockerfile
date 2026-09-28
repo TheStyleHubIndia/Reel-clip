@@ -107,7 +107,7 @@ USER appuser
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
 # Expose FastAPI port
-EXPOSE 8000
+EXPOSE 10000
 
 # Run FastAPI app. --proxy-headers + --forwarded-allow-ips trust the reverse
 # proxy's X-Forwarded-Proto so generated URLs (e.g. the OAuth redirect_uri) use
@@ -128,6 +128,6 @@ EXPOSE 8000
 # HEALTHCHECK with its own curl/wget command, and an image without either
 # reports unhealthy forever and every deploy rolls back (2026-08-25).
 HEALTHCHECK --interval=5s --timeout=3s --start-period=30s --retries=2 \
-  CMD curl -sf http://127.0.0.1:8000/health/ready > /dev/null || exit 1
+  CMD-SHELL curl -sf http://127.0.0.1:$PORT/health/ready > /dev/null || exit 1
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*", "--timeout-graceful-shutdown", "15"]
+CMD ["sh", "-c", "exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips \"*\" --timeout-graceful-shutdown 15"]
