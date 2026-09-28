@@ -2902,6 +2902,16 @@ async def process_endpoint(
     env.setdefault("OMP_NUM_THREADS", "1")
     env.setdefault("MKL_NUM_THREADS", "1")
     env.setdefault("OPENBLAS_NUM_THREADS", "1")
+    # Render's small instances need the low-memory pipeline: tiny CPU Whisper,
+    # legacy scene detection, and no face/YOLO inference. This keeps the API
+    # process alive while the worker renders clips instead of getting killed.
+    env.setdefault("WHISPER_MODEL", "tiny")
+    env.setdefault("WHISPER_DEVICE", "cpu")
+    env.setdefault("WHISPER_COMPUTE", "int8")
+    env.setdefault("TRANSCRIBE_BACKEND", "whisper")
+    env.setdefault("SCENE_ENGINE", "pyscenedetect")
+    env.setdefault("REELFORGE_LITE", "1")
+    env.setdefault("DETECT_STRIDE", "12")
     if not paid_allowed:
         # Daily paid-proxy budget hit: this job runs on the free routes only.
         env.pop("PROXY_URL", None)
