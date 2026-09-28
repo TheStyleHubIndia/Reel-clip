@@ -87,12 +87,18 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 # Load the YOLO model once (Keep for backup or scene analysis if needed)
 # YOLO_MODEL_PATH lets deployments point at a pre-downloaded weights file so a
 # volume mounted over the workdir doesn't trigger a re-download at startup.
-model = YOLO(os.environ.get("YOLO_MODEL_PATH", "yolov8n.pt"))
+LITE_MODE = os.environ.get("REELFORGE_LITE", "0").lower() in ("1", "true", "yes")
+
+# Heavy visual detectors are optional. Render's small instances use the
+# lightweight center-crop path; full face/YOLO tracking remains available on
+# larger self-hosted machines by leaving REELFORGE_LITE unset.
+model = None if LITE_MODE else YOLO(os.environ.get("YOLO_MODEL_PATH", "yolov8n.pt"))
 
 # --- MediaPipe Setup ---
-# Use standard Face Detection (BlazeFace) for speed
 mp_face_detection = mp.solutions.face_detection
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+face_detection = None if LITE_MODE else mp_face_detection.FaceDetection(
+    model_selection=1, min_detection_confidence=0.5
+)
 
 # Consecutive detections a large target move must survive before the camera
 # follows it (see SmoothedCameraman.update_target). Env-overridable so the
@@ -432,9 +438,13 @@ def _detection_frame(frame):
 def detect_face_candidates(frame):
     """
     Returns list of all detected faces using lightweight FaceDetection.
+    In low-memory Render mode visual tracking is intentionally disabled and
+    center-crop framing is used by SmoothedCameraman.
     Boxes are in ORIGINAL frame coordinates (detection runs downscaled;
     MediaPipe's relative coords make the mapping exact).
     """
+    if LITE_MODE or face_detection is None:
+        return []
     height, width, _ = frame.shape
     small, _scale = _detection_frame(frame)
     rgb_frame = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
@@ -463,9 +473,12 @@ def detect_face_candidates(frame):
 def detect_person_yolo(frame):
     """
     Fallback: Detect largest person using YOLO when face detection fails.
+    Disabled in low-memory Render mode.
     Returns [x, y, w, h] of the person's 'upper body' approximation, in
     ORIGINAL frame coordinates (inference runs on a downscaled copy).
     """
+    if LITE_MODE or model is None:
+        return None
     small, scale = _detection_frame(frame)
     # Use the globally loaded model
     with DETECT_LOCK:
