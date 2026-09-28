@@ -35,14 +35,23 @@ import layout_ranges
 load_dotenv()
 
 # Constants
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "output"
+# Render's default filesystem is ephemeral. When REELFORGE_DATA_DIR points to
+# an attached persistent disk (for example /var/data), all job inputs/outputs
+# and resume manifests live there and survive restarts/deploys. Without it,
+# local development keeps the historical relative paths.
+REELFORGE_DATA_DIR = os.environ.get("REELFORGE_DATA_DIR", "").strip()
+if REELFORGE_DATA_DIR:
+    os.makedirs(REELFORGE_DATA_DIR, exist_ok=True)
+
+UPLOAD_DIR = os.path.join(REELFORGE_DATA_DIR, "uploads") if REELFORGE_DATA_DIR else "uploads"
+OUTPUT_DIR = os.path.join(REELFORGE_DATA_DIR, "output") if REELFORGE_DATA_DIR else "output"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Configuration
-# Default to 1 if not set, but user can set higher for powerful servers
-MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "5"))
+# One heavy video pipeline at a time is the safe default for small Render
+# instances. Operators can raise this explicitly on larger machines.
+MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "1"))
 MAX_FILE_SIZE_MB = 2048  # 2GB limit
 
 # How TikTok receives our uploads. MEDIA_UPLOAD lands the video in the user's
