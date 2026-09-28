@@ -128,6 +128,6 @@ EXPOSE 10000
 # HEALTHCHECK with its own curl/wget command, and an image without either
 # reports unhealthy forever and every deploy rolls back (2026-08-25).
 HEALTHCHECK --interval=5s --timeout=3s --start-period=30s --retries=2 \
-  CMD-SHELL curl -sf http://127.0.0.1:$PORT/health/ready > /dev/null || exit 1
+  CMD curl -sf http://127.0.0.1:10000/health/ready > /dev/null || exit 1
 
 CMD ["sh", "-c", "exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips \"*\" --timeout-graceful-shutdown 15"]
