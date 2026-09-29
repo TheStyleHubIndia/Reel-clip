@@ -2482,6 +2482,51 @@ async def health_ready():
         return JSONResponse({"status": "stopping"}, status_code=503)
     return {"status": "ready"}
 
+@app.get("/health/db")
+async def health_db():
+    """Read-only Supabase connectivity/schema probe. Never returns credentials."""
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_key = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+    if not supabase_url or not supabase_key:
+        return JSONResponse(
+            {"status": "error", "supabase": "not_configured"},
+            status_code=503,
+        )
+
+    try:
+        import httpx
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Prefer": "count=exact",
+            "Range": "0-0",
+        }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                f"{supabase_url}/rest/v1/projects?select=id",
+                headers=headers,
+            )
+
+        if response.status_code >= 400:
+            return JSONResponse(
+                {"status": "error", "supabase": "query_failed", "http_status": response.status_code},
+                status_code=503,
+            )
+
+        content_range = response.headers.get("content-range", "")
+        total = content_range.rsplit("/", 1)[-1] if "/" in content_range else ""
+        return {
+            "status": "ok",
+            "supabase": "reachable",
+            "projects_count": int(total) if total.isdigit() else None,
+        }
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "supabase": "unreachable"},
+            status_code=503,
+        )
+
+
 @app.get("/api/config")
 async def get_config():
     return {
