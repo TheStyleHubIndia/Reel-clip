@@ -2957,6 +2957,19 @@ async def process_endpoint(
     env.setdefault("SCENE_ENGINE", "pyscenedetect")
     env.setdefault("REELFORGE_LITE", "1")
     env.setdefault("DETECT_STRIDE", "12")
+    # Free Render has a hard 512 MB memory ceiling. Keep ASR/rendering from
+    # turning a long source into an OOM/restart/502: on this deployment an
+    # operator can set a smaller/larger safe cap without changing the UI.
+    # Paid/managed reservations below still take precedence.
+    safe_source_cap = os.environ.get("REELFORGE_SOURCE_CAP_MINUTES", "").strip()
+    if safe_source_cap:
+        try:
+            cap = float(safe_source_cap)
+            if cap > 0:
+                env.setdefault("SOURCE_CAP_MINUTES", str(cap))
+                env.setdefault("EARLY_AUDIO", "0")
+        except ValueError:
+            print("[memory] ignoring invalid REELFORGE_SOURCE_CAP_MINUTES")
     if not paid_allowed:
         # Daily paid-proxy budget hit: this job runs on the free routes only.
         env.pop("PROXY_URL", None)
